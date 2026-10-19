@@ -36,13 +36,27 @@ export function yieldMetrics(position,history,now=Date.parse(position.checkedAt)
  return {lastClaim:last,sinceOpened:!last&&!!history.openedAt,daily,apy:Number.isFinite(apy)?apy:null,trailingApy:Number.isFinite(trailing)?trailing:null,windowDays,dailyEstimates,earningsUsd:earned,method:'Daily estimate = current unclaimed fees ÷ days since the latest recorded claim (or verified position opening when no claims exist). APY = (1 + daily estimate ÷ current deposited liquidity)^365 − 1. Assumes daily reinvestment and constant current liquidity; uses current token prices, excludes gas, and is not a forecast.',trailingMethod:'30-day estimate allocates claimed fees evenly between consecutive claims, plus current unclaimed fees since the latest claim, prorated to the window. First claim is only an anchor. Assumes full claims and constant current principal; deposits, withdrawals and partial claims can distort results. UTC day buckets; current token prices; excludes gas.'};
 }
 async function explorerLogs(p,topic,mint=false){const c=CHAINS[p.chain],q=new URLSearchParams({module:'logs',action:'getLogs',address:c.manager,fromBlock:'0',toBlock:'latest',topic0:topic,[mint?'topic3':'topic1']:'0x'+word(p.id),[mint?'topic0_3_opr':'topic0_1_opr']:'and'});let d;for(let attempt=0;attempt<3;attempt++){try{const r=await fetch(EXPLORERS[p.chain]+'/api?'+q,{signal:AbortSignal.timeout(20000)});d=await r.json();if(!r.ok||!Array.isArray(d.result)||d.result.length>=1000||!['0','1'].includes(d.status))throw Error('History source unavailable');break}catch(e){if(attempt===2)throw e;await new Promise(resolve=>setTimeout(resolve,500*(attempt+1)))}}for(const l of d.result)if(l.address?.toLowerCase()!==c.manager||l.topics?.[0]?.toLowerCase()!==topic||l.topics?.[mint?3:1]?.toLowerCase()!=='0x'+word(p.id)||l.removed)throw Error('Invalid history log');return d.result}
+// NFT-specific endpoint provides an independent path when legacy log indexing fails.
+async function openingTime(p,previous={}){
+ if(Number.isFinite(previous.openedAt)&&previous.openedAt>0)return previous.openedAt;
+ try{const transfers=await explorerLogs(p,'0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef',true);const mint=transfers.find(l=>/^0x0{64}$/i.test(l.topics?.[1]));if(Number(mint?.timeStamp)>0)return Number(mint.timeStamp)}catch{}
+ const manager=CHAINS[p.chain].manager;let page={};
+ for(let i=0;i<10;i++){
+  const r=await fetch(EXPLORERS[p.chain]+'/api/v2/tokens/'+manager+'/instances/'+p.id+'/transfers?'+new URLSearchParams(page),{signal:AbortSignal.timeout(12000)});
+  const d=await r.json();if(!r.ok||!Array.isArray(d.items))throw Error('Opening event unavailable');
+  const mint=d.items.find(l=>/^0x0{40}$/i.test(l.from?.hash)&&l.token?.address_hash?.toLowerCase()===manager&&String(l.total?.token_id)===String(p.id));
+  const timestamp=Date.parse(mint?.timestamp)/1000;if(Number.isFinite(timestamp)&&timestamp>0)return timestamp;
+  if(!d.next_page_params)break;page=d.next_page_params;
+ }
+ return null;
+}
 export async function positionHistory(position,previous={}){
  const p=position;
  try{const [logs,withdrawals]=await Promise.all([explorerLogs(p,COLLECT),explorerLogs(p,DECREASE)]);
  const rows=logs.map(l=>{const w=words(l.data);return {hash:l.transactionHash,index:Number(l.logIndex),timestamp:Number(l.timeStamp),amounts:[Number(uint(w[1]))/10**p.tokens[0].decimals,Number(uint(w[2]))/10**p.tokens[1].decimals]}});
  if(rows.some(r=>!/^0x[0-9a-f]{64}$/i.test(r.hash)||!(r.timestamp>0)||!r.amounts.every(a=>Number.isFinite(a)&&a>=0)))throw Error('Invalid history');
- let openedAt=null;if(!rows.length){try{const transfers=await explorerLogs(p,'0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef',true);const mint=transfers.find(l=>/^0x0{64}$/i.test(l.topics?.[1]));if(mint&&Number(mint.timeStamp)>0)openedAt=Number(mint.timeStamp)}catch{}}
- if(!rows.length&&!openedAt){try{return await recentRpcHistory(position,previous)}catch{}}
+ let openedAt=previous.openedAt||null;if(!rows.length){try{openedAt=await openingTime(p,previous)}catch{}}
+ if(!rows.length&&!openedAt)return await recentRpcHistory(position,previous);
  const h={status:'current',openedAt,source:'On-chain events',partial:false,checkedAt:new Date().toISOString(),rows:[...new Map(rows.map(r=>[r.hash+':'+r.index,r])).values()].sort((a,b)=>b.timestamp-a.timestamp),principalWarning:withdrawals.length>0};h.metrics=yieldMetrics(position,h);return h;
  }catch{try{return await recentRpcHistory(position,previous)}catch{}return {status:'unavailable',rows:[],checkedAt:null,error:'Claim history temporarily unavailable from the public explorer. Refresh to retry.'}}
 }
