@@ -42,6 +42,7 @@ export async function positionHistory(position,previous={}){
  const rows=logs.map(l=>{const w=words(l.data);return {hash:l.transactionHash,index:Number(l.logIndex),timestamp:Number(l.timeStamp),amounts:[Number(uint(w[1]))/10**p.tokens[0].decimals,Number(uint(w[2]))/10**p.tokens[1].decimals]}});
  if(rows.some(r=>!/^0x[0-9a-f]{64}$/i.test(r.hash)||!(r.timestamp>0)||!r.amounts.every(a=>Number.isFinite(a)&&a>=0)))throw Error('Invalid history');
  let openedAt=null;if(!rows.length){try{const transfers=await explorerLogs(p,'0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef',true);const mint=transfers.find(l=>/^0x0{64}$/i.test(l.topics?.[1]));if(mint&&Number(mint.timeStamp)>0)openedAt=Number(mint.timeStamp)}catch{}}
+ if(!rows.length&&!openedAt){try{return await recentRpcHistory(position,previous)}catch{}}
  const h={status:'current',openedAt,source:'On-chain events',partial:false,checkedAt:new Date().toISOString(),rows:[...new Map(rows.map(r=>[r.hash+':'+r.index,r])).values()].sort((a,b)=>b.timestamp-a.timestamp),principalWarning:withdrawals.length>0};h.metrics=yieldMetrics(position,h);return h;
  }catch{try{return await recentRpcHistory(position,previous)}catch{}return {status:'unavailable',rows:[],checkedAt:null,error:'Claim history temporarily unavailable from the public explorer. Refresh to retry.'}}
 }
@@ -49,20 +50,20 @@ export async function positionHistory(position,previous={}){
 // Public RPC fallback: scan backwards to establish the latest claim, rather
 // than presenting an incomplete scan as lifetime history.
 export async function recentRpcHistory(p,previous={},request){
- const manager='0x03a520b32c04bf3beef7beb72e919cf822ed34f1',id='0x'+BigInt(p.id).toString(16).padStart(64,'0');
- const call=request|| (async(method,params)=>{for(let attempt=0;attempt<5;attempt++){if(attempt)await new Promise(resolve=>setTimeout(resolve,1500*attempt));const r=await fetch('https://base.gateway.tenderly.co',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method,params}),signal:AbortSignal.timeout(12000)});const d=await r.json();if((r.status===429||d.error?.code===-32005)&&attempt<4)continue;if(!r.ok||d.error||d.result==null)throw Error('History RPC unavailable');await new Promise(resolve=>setTimeout(resolve,350));return d.result}throw Error('History RPC rate limited')});
- const head=p.block,hex=n=>'0x'+n.toString(16),found=[];let low=head,withdrawn=false;
- if(p.chain!=='base'||!Number.isSafeInteger(head)||head<0)throw Error('History RPC unsupported');
+ const configs={base:{manager:'0x03a520b32c04bf3beef7beb72e919cf822ed34f1',rpc:'https://base.gateway.tenderly.co'},ethereum:{manager:'0xc36442b4a4522e871399cd717abdd847ab11fe88',rpc:'https://eth.drpc.org'}},config=configs[p.chain];if(!config)throw Error('History RPC unsupported');const manager=config.manager,transfer='0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef',id='0x'+BigInt(p.id).toString(16).padStart(64,'0');
+ const call=request|| (async(method,params)=>{for(let attempt=0;attempt<5;attempt++){if(attempt)await new Promise(resolve=>setTimeout(resolve,1500*attempt));const r=await fetch(config.rpc,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method,params}),signal:AbortSignal.timeout(12000)});const d=await r.json();if((r.status===429||d.error?.code===-32005)&&attempt<4)continue;if(!r.ok||d.error||d.result==null)throw Error('History RPC unavailable');await new Promise(resolve=>setTimeout(resolve,350));return d.result}throw Error('History RPC rate limited')});
+ const head=p.block,hex=n=>'0x'+n.toString(16),found=[];let low=head,withdrawn=false,mint=null;
+ if(!Number.isSafeInteger(head)||head<0)throw Error('History RPC unsupported');
  for(let batch=0;batch<76;batch++){
   const ranges=Array.from({length:4},(_,i)=>{const end=head-(batch*4+i)*1000;return {end,start:Math.max(0,end-999)}}).filter(x=>x.end>=0);
   if(!ranges.length)break;
-  const results=[];for(const x of ranges){const logs=await call('eth_getLogs',[{address:manager,fromBlock:hex(x.start),toBlock:hex(x.end),topics:[[COLLECT,DECREASE],id]}]);results.push({...x,logs});if(logs.some(l=>l.topics?.[0]?.toLowerCase()===COLLECT))break;}
+  const results=[];for(const x of ranges){const logs=await call('eth_getLogs',[{address:manager,fromBlock:hex(x.start),toBlock:hex(x.end),topics:[[COLLECT,DECREASE],id]}]);results.push({...x,logs});if(logs.some(l=>l.topics?.[0]?.toLowerCase()===COLLECT))break;const mints=await call('eth_getLogs',[{address:manager,fromBlock:hex(x.start),toBlock:hex(x.end),topics:[transfer,'0x'+'0'.repeat(64),null,id]}]);if(!Array.isArray(mints))throw Error('Invalid opening events');for(const l of mints){if(l.removed||l.address?.toLowerCase()!==manager||l.topics?.[0]?.toLowerCase()!==transfer||!/^0x0{64}$/i.test(l.topics?.[1])||l.topics?.[3]?.toLowerCase()!==id||Number(BigInt(l.blockNumber))<x.start||Number(BigInt(l.blockNumber))>x.end)throw Error('Invalid opening event');mint=l;}if(mint)break;}
   for(const x of results){if(!Array.isArray(x.logs))throw Error('Invalid RPC logs');low=Math.min(low,x.start);for(const l of x.logs){if(l.removed||l.address?.toLowerCase()!==manager||l.topics?.[1]?.toLowerCase()!==id||![COLLECT,DECREASE].includes(l.topics?.[0]?.toLowerCase())||Number(BigInt(l.blockNumber))<x.start||Number(BigInt(l.blockNumber))>x.end)throw Error('Invalid RPC log');if(l.topics[0].toLowerCase()===DECREASE)withdrawn=true;else found.push(l)}}
-  if(found.length||low===0)break;
+  if(found.length||mint||low===0)break;
  }
- if(!found.length)throw Error('No recent claim found in RPC scan');
- const blocks=new Map();await Promise.all([...new Set(found.map(l=>l.blockNumber))].map(async b=>{const d=await call('eth_getBlockByNumber',[b,false]);if(!d||d.number!==b||!(Number(BigInt(d.timestamp))>0))throw Error('Invalid claim block');blocks.set(b,Number(BigInt(d.timestamp)))}));
+ if(!found.length&&!mint)throw Error('No recent claim or opening found in RPC scan');
+ const blocks=new Map();await Promise.all([...new Set([...found,...mint?[mint]:[]].map(l=>l.blockNumber))].map(async b=>{const d=await call('eth_getBlockByNumber',[b,false]);if(!d||d.number!==b||!(Number(BigInt(d.timestamp))>0))throw Error('Invalid claim block');blocks.set(b,Number(BigInt(d.timestamp)))}));
  const rows=found.map(l=>{if(!/^0x(?:[a-f0-9]{64}){3}$/i.test(l.data)||!/^0x[a-f0-9]{64}$/i.test(l.transactionHash))throw Error('Invalid claim');const w=l.data.slice(2).match(/.{64}/g);return {hash:l.transactionHash,index:Number(BigInt(l.logIndex)),timestamp:blocks.get(l.blockNumber),amounts:[1,2].map((j,i)=>Number(BigInt('0x'+w[j]))/10**p.tokens[i].decimals)}});
  const merged=[...new Map([...(previous.rows||[]),...rows].map(r=>[r.hash+':'+r.index,r])).values()].sort((a,b)=>b.timestamp-a.timestamp);
- return {status:'current',source:'Direct blockchain RPC',checkedAt:new Date().toISOString(),rows:merged,partial:previous.partial!==false,scannedFrom:low,scannedTo:head,principalWarning:withdrawn||!!previous.principalWarning};
+ return {status:'current',source:'Direct blockchain RPC',openedAt:mint?blocks.get(mint.blockNumber):previous.openedAt||null,checkedAt:new Date().toISOString(),rows:merged,partial:previous.partial!==false,scannedFrom:low,scannedTo:head,principalWarning:withdrawn||!!previous.principalWarning};
 }
