@@ -23,7 +23,7 @@ const COLLECT='0x40d0efd1a53d60ecbf40971b9daf7dc90178c3aadc7aab1765632738fa8b8f0
 const EXPLORERS={base:'https://base.blockscout.com',ethereum:'https://eth.blockscout.com',optimism:'https://optimism.blockscout.com',arbitrum:'https://arbitrum.blockscout.com',polygon:'https://polygon.blockscout.com'};
 export function yieldMetrics(position,history,now=Date.parse(position.checkedAt)){
  const rows=history.rows||[],last=rows[0]||null,days=last?(now-last.timestamp*1000)/86400000:null,prices=position.tokens.map(t=>t.price),value=amounts=>amounts?.length===2&&prices.every(Number.isFinite)?amounts.reduce((s,a,i)=>s+Number(a)*prices[i],0):null;
- const usable=history.status==='current'&&!history.principalWarning&&position.status!=='closed';
+ const usable=['current','saved'].includes(history.status)&&!history.principalWarning&&position.status!=='closed';
  const daily=usable&&position.feesValue!=null&&days>0?position.feesValue/days:null;
  const apy=daily!=null&&position.value>0?Math.expm1(365*Math.log1p(daily/position.value)):null;
  // Matches DeFi claim-interval backfill: first claim is only an anchor.
