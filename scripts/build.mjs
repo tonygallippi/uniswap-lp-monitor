@@ -1,0 +1,18 @@
+import {readFile,writeFile,mkdir,copyFile} from 'node:fs/promises';
+import {createHash} from 'node:crypto';
+import {fileURLToPath} from 'node:url';
+import {resolve} from 'node:path';
+const root=fileURLToPath(new URL('../',import.meta.url)),dest=resolve(root,'docs');await mkdir(dest,{recursive:true});
+const [source,rpc,history]=await Promise.all(['src/app.html','src/rpc.mjs','src/history.mjs'].map(p=>readFile(resolve(root,p),'utf8')));
+const metric=history.slice(history.indexOf('export function yieldMetrics'),history.indexOf('async function explorerLogs')).replace('export function','function');
+const html=source.replace('__YIELD_METRICS__',metric),data=rpc+'\n'+history;
+await writeFile(resolve(dest,'index.html'),html);await writeFile(resolve(dest,'data.js'),data);
+for(const name of ['icon-180.png','icon-192.png','icon-512.png','lp-icon.svg'])await copyFile(resolve(root,'assets',name),resolve(dest,name));
+await writeFile(resolve(dest,'manifest.webmanifest'),JSON.stringify({id:'./',name:'LP Monitor',short_name:'LP Monitor',description:'Your Uniswap liquidity, at a glance.',start_url:'./',scope:'./',display:'standalone',background_color:'#0c1018',theme_color:'#0c1018',icons:[{src:'./icon-192.png?v=3',sizes:'192x192',type:'image/png',purpose:'any'},{src:'./icon-512.png?v=3',sizes:'512x512',type:'image/png',purpose:'any maskable'}]},null,2)+'\n');
+const version=createHash('sha256').update(html+data).digest('hex').slice(0,12);
+await writeFile(resolve(dest,'sw.js'),`const BASE=new URL('./',self.location.href);const PREFIX='lp-monitor-'+encodeURIComponent(BASE.pathname)+'-';const CACHE=PREFIX+'${version}';const SHELL=new URL('index.html',BASE).href;const ASSETS=['./','./index.html','./data.js','./manifest.webmanifest','./icon-180.png?v=3','./icon-192.png?v=3','./icon-512.png?v=3','./lp-icon.svg'].map(p=>new URL(p,BASE).href);
+self.addEventListener('install',e=>e.waitUntil((async()=>{const c=await caches.open(CACHE);await c.addAll(ASSETS);await self.skipWaiting()})()));
+self.addEventListener('activate',e=>e.waitUntil((async()=>{for(const k of await caches.keys())if(k.startsWith(PREFIX)&&k!==CACHE)await caches.delete(k);await self.clients.claim()})()));
+self.addEventListener('fetch',e=>{const u=new URL(e.request.url);if(e.request.method!=='GET'||u.origin!==BASE.origin||!u.pathname.startsWith(BASE.pathname))return;const nav=e.request.mode==='navigate';if(!nav&&!ASSETS.includes(u.href))return;e.respondWith((async()=>{try{const r=await fetch(e.request,{cache:'no-cache'});if(r.ok){const c=await caches.open(CACHE);await c.put(nav?SHELL:e.request,r.clone())}return r}catch{return await caches.match(nav?SHELL:e.request)||new Response('Connect to the internet to load LP Monitor.',{status:503})}})())});\n`);
+await writeFile(resolve(dest,'.nojekyll'),'');
+console.log('Built docs/ for GitHub Pages.');

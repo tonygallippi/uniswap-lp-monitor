@@ -1,0 +1,12 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+import {spawnSync} from 'node:child_process';
+import vm from 'node:vm';
+import {parsePosition} from '../src/rpc.mjs';
+const html=await readFile(new URL('../docs/index.html',import.meta.url),'utf8');
+test('project-site resources stay within repository path',()=>{const base=new URL('https://example.github.io/uniswap-lp-monitor/');const links=[...html.matchAll(/(?:href|src)="(\.[^"]+)"/g)].map(m=>m[1]);assert(links.length>=3);for(const link of links)assert(new URL(link,base).pathname.startsWith('/uniswap-lp-monitor/'));assert(html.includes('from "./data.js"'));assert(html.includes("register('./sw.js')"));assert(!/(?:href|src)="\//.test(html));});
+test('new users start empty and use device-only storage',()=>{assert(html.includes('??[]'));assert(!html.includes('const EXAMPLE'));assert(html.includes('lp-monitor:watchlist'));assert(!html.includes('/api/position'));assert(!html.includes('/api/history'));assert(!html.includes('__YIELD_METRICS__'));});
+test('manifest and service worker use relative installation scope',async()=>{const m=JSON.parse(await readFile(new URL('../docs/manifest.webmanifest',import.meta.url)));assert.equal(m.start_url,'./');assert.equal(m.scope,'./');assert.equal(m.id,'./');for(const i of m.icons)assert(i.src.startsWith('./'));const sw=await readFile(new URL('../docs/sw.js',import.meta.url),'utf8');new vm.Script(sw);assert(sw.includes('BASE.pathname'));assert(sw.includes('SHELL'));assert(!sw.includes('cache.put(nav?\'/\''));});
+test('browser scripts parse and contain no private dashboard integration',async()=>{for(const m of html.matchAll(/<script(?: type="module")?>([\s\S]*?)<\/script>/g))new vm.Script(m[1].replace(/^import .*?;$/gm,''));const data=await readFile(new URL('../docs/data.js',import.meta.url),'utf8');const result=spawnSync(process.execPath,['--check','--input-type=module'],{input:data,encoding:'utf8'});assert.equal(result.status,0,result.stderr);assert(!data.includes('SERVICE_TOKEN'));assert(!data.includes('serviceJSON'));});
+test('only supported Uniswap v3 links are accepted',()=>{assert.equal(parsePosition('https://app.uniswap.org/positions/v3/base/1').id,'1');for(const u of ['https://evil.test/positions/v3/base/1','https://app.uniswap.org/positions/v4/base/1','https://app.uniswap.org/positions/v3/base/0'])assert.throws(()=>parsePosition(u));});
