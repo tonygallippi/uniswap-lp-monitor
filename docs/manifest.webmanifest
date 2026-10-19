@@ -1,7 +1,7 @@
 {
   "id": "./",
-  "name": "LP Monitor",
-  "short_name": "LP Monitor",
+  "name": "LP Watcher",
+  "short_name": "LP Watcher",
   "description": "Your Uniswap liquidity, at a glance.",
   "start_url": "./",
   "scope": "./",

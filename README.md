@@ -1,18 +1,18 @@
-# LP Monitor
+# LP Watcher
 
-LP Monitor is a Progressive Web App (PWA) for active liquidity providers. Monitor your Uniswap liquidity positions across multiple addresses and chains in one simple view.
+LP Watcher is a Progressive Web App (PWA) for active liquidity providers. Monitor your Uniswap liquidity positions across multiple addresses and chains in one simple view.
 
 Runs in your browser. Your watchlist, addresses and saved data stay in your browser’s local storage on this device; they are not stored on our servers. Public data providers receive the identifiers needed to fetch position data.
 
-**[Open LP Monitor](https://tonygallippi.github.io/uniswap-lp-monitor/)**
+**[Open LP Watcher](https://tonygallippi.github.io/uniswap-lp-monitor/)**
 
 ## Screenshots
 
 <p>
-  <img src="assets/screenshots/splash-screen.png" alt="LP Monitor welcome screen for active liquidity providers" width="320">
-  <img src="assets/screenshots/add-position.png" alt="Add a Uniswap position by pasting its URL into LP Monitor" width="320">
-  <img src="assets/screenshots/list-view.jpg" alt="LP Monitor list view showing position values, unclaimed fees and estimated APY" width="320">
-  <img src="assets/screenshots/card-view.jpg" alt="LP Monitor card view showing liquidity, token balances, fees and position range" width="320">
+  <img src="assets/screenshots/splash-screen.png" alt="LP Watcher welcome screen for active liquidity providers" width="320">
+  <img src="assets/screenshots/add-position.png" alt="Add a Uniswap position by pasting its URL into LP Watcher" width="320">
+  <img src="assets/screenshots/list-view.jpg" alt="LP Watcher list view showing position values, unclaimed fees and estimated APY" width="320">
+  <img src="assets/screenshots/card-view.jpg" alt="LP Watcher card view showing liquidity, token balances, fees and position range" width="320">
 </p>
 
 *Illustrative screenshots.*
@@ -35,10 +35,10 @@ Launch it from the new Home Screen icon for the full app experience.
 
 ## Install on Android
 
-1. Open [LP Monitor](https://tonygallippi.github.io/uniswap-lp-monitor/) in **Chrome** on your Android device.
+1. Open [LP Watcher](https://tonygallippi.github.io/uniswap-lp-monitor/) in **Chrome** on your Android device.
 2. Tap the **three-dot menu (⋮)** beside the address bar.
 3. Choose **Install and create shortcut → Install**. On some Chrome versions, this appears as **Add to Home screen → Install** or **Install app**.
-4. Confirm the installation, then open **LP Monitor** from your Home Screen or app drawer.
+4. Confirm the installation, then open **LP Watcher** from your Home Screen or app drawer.
 
 No Play Store download is needed. See [Google’s web app installation guide](https://support.google.com/chrome/answer/9658361?co=GENIE.Platform%3DAndroid&hl=en).
 
@@ -51,7 +51,7 @@ No Play Store download is needed. See [Google’s web app installation guide](ht
 - **Position range:** low and high prices, with a white dot marking the current price.
 - **In range / Out of range:** whether the position is within its active liquidity range.
 
-Tap **View on Uniswap** to open the position there. LP Monitor does not claim fees, reinvest funds or submit transactions.
+Tap **View on Uniswap** to open the position there. LP Watcher does not claim fees, reinvest funds or submit transactions.
 
 ## Refresh and manage positions
 
@@ -89,4 +89,4 @@ Live updates require internet access. Previously cached app files and saved posi
 
 ---
 
-LP Monitor is an independent monitoring tool and is **not affiliated with Uniswap.org or Uniswap Labs**. See [artwork attribution](THIRD_PARTY_NOTICES.md).
+LP Watcher is an independent monitoring tool and is **not affiliated with Uniswap.org or Uniswap Labs**. See [artwork attribution](THIRD_PARTY_NOTICES.md).
