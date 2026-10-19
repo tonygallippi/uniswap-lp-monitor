@@ -15,11 +15,32 @@ export function yieldMetrics(position,history,now=Date.parse(position.checkedAt)
  return {lastClaim:last,daily,apy:Number.isFinite(apy)?apy:null,trailingApy:Number.isFinite(trailing)?trailing:null,windowDays,dailyEstimates,earningsUsd:earned,method:'Daily estimate = current unclaimed fees ÷ days since the latest recorded claim. APY = (1 + daily estimate ÷ current deposited liquidity)^365 − 1. Assumes daily reinvestment and constant current liquidity; uses current token prices, excludes gas, and is not a forecast.',trailingMethod:'30-day estimate allocates claimed fees evenly between consecutive claims, plus current unclaimed fees since the latest claim, prorated to the window. First claim is only an anchor. Assumes full claims and constant current principal; deposits, withdrawals and partial claims can distort results. UTC day buckets; current token prices; excludes gas.'};
 }
 async function explorerLogs(p,topic){const c=CHAINS[p.chain],q=new URLSearchParams({module:'logs',action:'getLogs',address:c.manager,fromBlock:'0',toBlock:'latest',topic0:topic,topic1:'0x'+word(p.id),topic0_1_opr:'and'});const r=await fetch(EXPLORERS[p.chain]+'/api?'+q,{signal:AbortSignal.timeout(16000)});const d=await r.json();if(!r.ok||!Array.isArray(d.result)||d.result.length>=1000||!['0','1'].includes(d.status))throw Error('History source unavailable');for(const l of d.result)if(l.address?.toLowerCase()!==c.manager||l.topics?.[0]?.toLowerCase()!==topic||l.topics?.[1]?.toLowerCase()!=='0x'+word(p.id)||l.removed)throw Error('Invalid history log');return d.result}
-export async function positionHistory(position){
+export async function positionHistory(position,previous={}){
  const p=position;
  try{const [logs,withdrawals]=await Promise.all([explorerLogs(p,COLLECT),explorerLogs(p,DECREASE)]);
  const rows=logs.map(l=>{const w=words(l.data);return {hash:l.transactionHash,index:Number(l.logIndex),timestamp:Number(l.timeStamp),amounts:[Number(uint(w[1]))/10**p.tokens[0].decimals,Number(uint(w[2]))/10**p.tokens[1].decimals]}});
  if(rows.some(r=>!/^0x[0-9a-f]{64}$/i.test(r.hash)||!(r.timestamp>0)||!r.amounts.every(a=>Number.isFinite(a)&&a>=0)))throw Error('Invalid history');
- const h={status:'current',source:'On-chain events',checkedAt:new Date().toISOString(),rows:[...new Map(rows.map(r=>[r.hash+':'+r.index,r])).values()].sort((a,b)=>b.timestamp-a.timestamp),principalWarning:withdrawals.length>0};h.metrics=yieldMetrics(position,h);return h;
- }catch{return {status:'unavailable',rows:[],checkedAt:null,error:'Claim history temporarily unavailable from the public explorer. Refresh to retry.'}}
+ const h={status:'current',source:'On-chain events',partial:false,checkedAt:new Date().toISOString(),rows:[...new Map(rows.map(r=>[r.hash+':'+r.index,r])).values()].sort((a,b)=>b.timestamp-a.timestamp),principalWarning:withdrawals.length>0};h.metrics=yieldMetrics(position,h);return h;
+ }catch{try{return await recentRpcHistory(position,previous)}catch{}return {status:'unavailable',rows:[],checkedAt:null,error:'Claim history temporarily unavailable from the public explorer. Refresh to retry.'}}
+}
+
+// Public RPC fallback: scan backwards to establish the latest claim, rather
+// than presenting an incomplete scan as lifetime history.
+export async function recentRpcHistory(p,previous={},request){
+ const manager='0x03a520b32c04bf3beef7beb72e919cf822ed34f1',id='0x'+BigInt(p.id).toString(16).padStart(64,'0');
+ const call=request|| (async(method,params)=>{for(let attempt=0;attempt<5;attempt++){if(attempt)await new Promise(resolve=>setTimeout(resolve,1500*attempt));const r=await fetch('https://base.gateway.tenderly.co',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method,params}),signal:AbortSignal.timeout(12000)});const d=await r.json();if((r.status===429||d.error?.code===-32005)&&attempt<4)continue;if(!r.ok||d.error||d.result==null)throw Error('History RPC unavailable');await new Promise(resolve=>setTimeout(resolve,350));return d.result}throw Error('History RPC rate limited')});
+ const head=p.block,hex=n=>'0x'+n.toString(16),found=[];let low=head,withdrawn=false;
+ if(p.chain!=='base'||!Number.isSafeInteger(head)||head<0)throw Error('History RPC unsupported');
+ for(let batch=0;batch<76;batch++){
+  const ranges=Array.from({length:4},(_,i)=>{const end=head-(batch*4+i)*1000;return {end,start:Math.max(0,end-999)}}).filter(x=>x.end>=0);
+  if(!ranges.length)break;
+  const results=[];for(const x of ranges){const logs=await call('eth_getLogs',[{address:manager,fromBlock:hex(x.start),toBlock:hex(x.end),topics:[[COLLECT,DECREASE],id]}]);results.push({...x,logs});if(logs.some(l=>l.topics?.[0]?.toLowerCase()===COLLECT))break;}
+  for(const x of results){if(!Array.isArray(x.logs))throw Error('Invalid RPC logs');low=Math.min(low,x.start);for(const l of x.logs){if(l.removed||l.address?.toLowerCase()!==manager||l.topics?.[1]?.toLowerCase()!==id||![COLLECT,DECREASE].includes(l.topics?.[0]?.toLowerCase())||Number(BigInt(l.blockNumber))<x.start||Number(BigInt(l.blockNumber))>x.end)throw Error('Invalid RPC log');if(l.topics[0].toLowerCase()===DECREASE)withdrawn=true;else found.push(l)}}
+  if(found.length||low===0)break;
+ }
+ if(!found.length)throw Error('No recent claim found in RPC scan');
+ const blocks=new Map();await Promise.all([...new Set(found.map(l=>l.blockNumber))].map(async b=>{const d=await call('eth_getBlockByNumber',[b,false]);if(!d||d.number!==b||!(Number(BigInt(d.timestamp))>0))throw Error('Invalid claim block');blocks.set(b,Number(BigInt(d.timestamp)))}));
+ const rows=found.map(l=>{if(!/^0x(?:[a-f0-9]{64}){3}$/i.test(l.data)||!/^0x[a-f0-9]{64}$/i.test(l.transactionHash))throw Error('Invalid claim');const w=l.data.slice(2).match(/.{64}/g);return {hash:l.transactionHash,index:Number(BigInt(l.logIndex)),timestamp:blocks.get(l.blockNumber),amounts:[1,2].map((j,i)=>Number(BigInt('0x'+w[j]))/10**p.tokens[i].decimals)}});
+ const merged=[...new Map([...(previous.rows||[]),...rows].map(r=>[r.hash+':'+r.index,r])).values()].sort((a,b)=>b.timestamp-a.timestamp);
+ return {status:'current',source:'Direct blockchain RPC',checkedAt:new Date().toISOString(),rows:merged,partial:previous.partial!==false,scannedFrom:low,scannedTo:head,principalWarning:withdrawn||!!previous.principalWarning};
 }
