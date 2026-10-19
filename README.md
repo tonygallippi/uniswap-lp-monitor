@@ -1,6 +1,6 @@
 # LP Monitor
 
-Monitor your Uniswap liquidity positions in one simple view. Watch multiple addresses and multiple chains in one view.
+LP Monitor is a Progressive Web App (PWA) that brings your Uniswap liquidity positions across multiple addresses and chains into one simple view.
 
 Runs in your browser. Your watchlist, addresses and saved data stay in your browser’s local storage on this device; they are not stored on our servers. Public data providers receive the identifiers needed to fetch position data.
 
@@ -31,6 +31,15 @@ No wallet connection, account, API key or signature is required.
 Open the app in **Safari**, tap **Share → Add to Home Screen**, enable **Open as Web App** if shown, then tap **Add**.
 
 Launch it from the new Home Screen icon for the full app experience.
+
+## Install on Android
+
+1. Open [LP Monitor](https://tonygallippi.github.io/uniswap-lp-monitor/) in **Chrome** on your Android device.
+2. Tap the **three-dot menu (⋮)** beside the address bar.
+3. Choose **Install and create shortcut → Install**. On some Chrome versions, this appears as **Add to Home screen → Install** or **Install app**.
+4. Confirm the installation, then open **LP Monitor** from your Home Screen or app drawer.
+
+No Play Store download is needed. See [Google’s web app installation guide](https://support.google.com/chrome/answer/9658361?co=GENIE.Platform%3DAndroid&hl=en).
 
 ## Your position card
 
