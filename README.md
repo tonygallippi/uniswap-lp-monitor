@@ -11,7 +11,7 @@ Monitor your Uniswap liquidity positions in one simple view.
   <img src="assets/screenshots/card-view.jpg" alt="LP Monitor card view showing liquidity, token balances, fees and position range" width="320">
 </p>
 
-*Illustrative screenshots with scaled example balances.*
+*Illustrative screenshots.*
 
 ## Get started
 
