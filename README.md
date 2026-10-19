@@ -4,6 +4,15 @@ Monitor your Uniswap liquidity positions in one simple view.
 
 **[Open LP Monitor](https://tonygallippi.github.io/uniswap-lp-monitor/)**
 
+## Screenshots
+
+<p>
+  <img src="assets/screenshots/list-view.jpg" alt="LP Monitor list view showing position values, unclaimed fees and estimated APY" width="320">
+  <img src="assets/screenshots/card-view.jpg" alt="LP Monitor card view showing liquidity, token balances, fees and position range" width="320">
+</p>
+
+*Illustrative screenshots with scaled example balances.*
+
 ## Get started
 
 1. Open the app and tap **Get started**.
