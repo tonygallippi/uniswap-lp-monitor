@@ -1,6 +1,6 @@
 # LP Monitor
 
-LP Monitor is a Progressive Web App (PWA) that brings your Uniswap liquidity positions across multiple addresses and chains into one simple view.
+LP Monitor is a Progressive Web App (PWA) for active liquidity providers. Monitor your Uniswap liquidity positions across multiple addresses and chains in one simple view.
 
 Runs in your browser. Your watchlist, addresses and saved data stay in your browser’s local storage on this device; they are not stored on our servers. Public data providers receive the identifiers needed to fetch position data.
 
