@@ -1,6 +1,8 @@
 # LP Monitor
 
-Monitor your Uniswap liquidity positions in one simple view.
+Monitor your Uniswap liquidity positions in one simple view. Watch multiple addresses and multiple chains in one view.
+
+Runs in your browser. Your watchlist, addresses and saved data stay in your browser’s local storage on this device; they are not stored on our servers. Public data providers receive the identifiers needed to fetch position data.
 
 **[Open LP Monitor](https://tonygallippi.github.io/uniswap-lp-monitor/)**
 
