@@ -9,6 +9,7 @@ Runs in your browser. Your watchlist, addresses and saved data stay in your brow
 ## Screenshots
 
 <p>
+  <img src="assets/screenshots/add-position.png" alt="Add a Uniswap position by pasting its URL into LP Monitor" width="320">
   <img src="assets/screenshots/list-view.jpg" alt="LP Monitor list view showing position values, unclaimed fees and estimated APY" width="320">
   <img src="assets/screenshots/card-view.jpg" alt="LP Monitor card view showing liquidity, token balances, fees and position range" width="320">
 </p>
