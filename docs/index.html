@@ -24,6 +24,7 @@ main{padding:calc(env(safe-area-inset-top) + 8px) 0 max(10px,env(safe-area-inset
 .cardtop{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:start}.cardtop .pair{display:contents}.cardtop .pair>.coins{grid-column:1;grid-row:1;display:flex;margin-top:0}.cardtop .pair>div:last-child{display:contents}.cardtop .pair h2{grid-column:2;grid-row:1}.cardtop>.status{grid-column:3;grid-row:1}.cardtop .meta{grid-column:1 / -1;grid-row:2;white-space:nowrap;font-size:clamp(10px,2.85vw,13px)}.cardtop .meta .owner-address{display:inline;margin:0;font-size:inherit;letter-spacing:normal}
 .summary-owner{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:inherit;color:#8d9db4}.summary-top{display:grid;grid-template-columns:minmax(0,1fr) auto}.summary-top>div{display:contents}.summary-top h2{grid-column:1;grid-row:1}.summary-top .status{grid-column:2;grid-row:1}.summary-top .meta{grid-column:1 / -1;grid-row:2;line-height:1.5;overflow-wrap:anywhere}
 .start{position:relative;justify-content:center;align-items:center;text-align:center}.start>span{position:absolute;right:20px}
+.swipe-stage{position:relative;overflow:hidden}.swipe-stage>.track{position:relative}.swipe-stage>.swipe-preview{position:absolute;inset:0;overflow:hidden;pointer-events:none;will-change:transform}.swipe-stage.swiping>.track:not(.swipe-preview){z-index:1}
 </style></head><body><section id="splash" class="splash" aria-label="Welcome to LP Watcher"><img src="./icon-512.png?v=3" alt="Unicorn LP" class="splashicon"><div class="splashkicker">YOUR LIQUIDITY, AT A GLANCE</div><h1>LIQUIDITY<br>WATCHER</h1><p class="splashdesc">A tool for active liquidity providers.<br>Many addresses, many chains.<br>One simple view.</p><button id="start" class="start">Start watching <span>→</span></button><p class="disclaimer">Independent monitoring tool. This site is not affiliated with Uniswap.org or Uniswap Labs.</p></section><main id="app-main" inert><div id="pull-refresh" class="pull-refresh" role="status" aria-live="polite" hidden><span id="pull-symbol">↓</span> <span id="pull-text">Pull to refresh</span></div><header><div class="brand"><img class="brandicon" src="./icon-192.png?v=3" alt="Unicorn LP"><div><div class="eyebrow">LIQUIDITY POOLS</div><h1>LP Watcher</h1></div></div><div class="head-actions"><button class="icon eye" id="privacy" aria-label="Hide balances" aria-pressed="false"></button><button class="icon add" id="add" aria-label="Add a position">+</button></div></header><div class="offline" id="offline" hidden>You're offline. Showing the last saved snapshot.</div><div class="toolbar"><span id="count">Your positions</span><div class="view-actions"><div class="view-toggle" role="group" aria-label="Position view"><button id="view-list" aria-label="List view" title="List view" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M8 5h13M8 12h13M8 19h13M3 5h1M3 12h1M3 19h1"/></svg></button><button id="view-card" aria-label="Card view" title="Card view" aria-pressed="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="5" y="3" width="14" height="18" rx="3"/><path d="M8 8h8M8 12h8M8 16h5"/></svg></button></div><button class="refresh" id="refresh" aria-label="Refresh positions" title="Refresh positions">↻</button></div></div><section class="track" id="track" aria-label="Watched positions" tabindex="0"></section><nav class="dots" id="dots" aria-label="Choose position"></nav><p class="hint" id="hint"></p><div class="install"><span>Made for your Home Screen</span><button id="install">How to install ↗</button></div></main>
 <dialog id="history-dialog" class="history-dialog"><div class="sheethead"><h2 id="history-title">Position earnings</h2><button class="close-sheet" data-close aria-label="Close earnings">×</button></div><div id="history-content"></div></dialog><dialog id="add-dialog"><h2>Watch a position</h2><p>Paste a Uniswap position link. Your liquidity and fees will appear here. Your watchlist is saved only on this device.</p><form id="add-form"><label for="url">Uniswap position URL</label><input id="url" type="url" inputmode="url" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="https://app.uniswap.org/positions/v3/…" required><p style="font-size:12px">Uniswap v3 · Base, Ethereum, Arbitrum, Optimism & Polygon</p><div class="error" id="add-error" role="alert"></div><div class="actions"><button type="button" data-close>Cancel</button><button type="submit" class="primary" id="save">Add position</button></div></form></dialog>
 <dialog id="remove-dialog"><h2>Stop watching?</h2><p id="remove-label"></p><p>This removes the card from this device. Your Uniswap position stays open.</p><div class="actions"><button data-close>Keep watching</button><button class="danger" id="remove">Remove</button></div></dialog>
@@ -67,7 +68,7 @@ function summary(url){const d=cache[url];if(!d)return '<article class="card summ
 function setView(next){view=next==='list'?'list':'card';try{localStorage.setItem('lp-monitor:view',view)}catch{}render()}
 $('view-card').onclick=()=>setView('card');$('view-list').onclick=()=>setView('list');
 
-function render(){const isList=view==='list';$('track').classList.toggle('list-view',isList);$('dots').hidden=isList;$('view-card').setAttribute('aria-pressed',String(!isList));$('view-list').setAttribute('aria-pressed',String(isList));index=Math.min(index,Math.max(0,list.length-1));$('count').innerHTML='Watching <strong>'+list.length+' position'+(list.length===1?'':'s')+'</strong>';$('track').innerHTML=list.length?list.map(url=>'<div class="slide" data-url="'+esc(url)+'">'+(isList?summary(url):card(url))+'</div>').join(''):'<div class="slide empty"><h2>Your pools, in one place.</h2><p>Add a Uniswap position to watch its liquidity, fees and range.</p><button data-add>+ Watch a position</button></div>';$('dots').innerHTML=list.map((_,i)=>'<button data-index="'+i+'" class="'+(i===index?'active':'')+'" aria-label="Position '+(i+1)+'" aria-current="'+(i===index)+'"><i></i></button>').join('');$('hint').textContent=isList&&list.length?'Tap a position to view its card':list.length>1?'Swipe to explore your positions':list.length?'Add another position with +':'';requestAnimationFrame(()=>{const s=$('track').children[index];if(s&&!isList)$('track').scrollLeft=s.offsetLeft-$('track').children[0].offsetLeft})}
+function render(){if(firstCardSwipe?.dragging||swipeSettling)return;const isList=view==='list';$('track').classList.toggle('list-view',isList);$('dots').hidden=isList;$('view-card').setAttribute('aria-pressed',String(!isList));$('view-list').setAttribute('aria-pressed',String(isList));index=Math.min(index,Math.max(0,list.length-1));$('count').innerHTML='Watching <strong>'+list.length+' position'+(list.length===1?'':'s')+'</strong>';$('track').innerHTML=list.length?list.map(url=>'<div class="slide" data-url="'+esc(url)+'">'+(isList?summary(url):card(url))+'</div>').join(''):'<div class="slide empty"><h2>Your pools, in one place.</h2><p>Add a Uniswap position to watch its liquidity, fees and range.</p><button data-add>+ Watch a position</button></div>';$('dots').innerHTML=list.map((_,i)=>'<button data-index="'+i+'" class="'+(i===index?'active':'')+'" aria-label="Position '+(i+1)+'" aria-current="'+(i===index)+'"><i></i></button>').join('');$('hint').textContent=isList&&list.length?'Tap a position to view its card':list.length>1?'Swipe to explore your positions':list.length?'Add another position with +':'';requestAnimationFrame(()=>{const s=$('track').children[index];if(s&&!isList)$('track').scrollLeft=s.offsetLeft-$('track').children[0].offsetLeft})}
 async function api(url){return loadPosition(url)}
 async function refresh(forceHistory=false){if(busy||!navigator.onLine)return;busy=true;$('refresh').disabled=true;$('refresh').textContent='⋯';await Promise.allSettled(list.map(async url=>{try{const d=await api(url);if(list.includes(url)){cache[url]=d;delete errors[url];loadHistory(url,forceHistory===true)}}catch(e){errors[url]=e.message;if(cache[url])loadHistory(url,forceHistory===true)}}));persist();render();busy=false;$('refresh').disabled=false;$('refresh').textContent='↻'}
 function addOpen(){$('add-error').textContent='';$('add-dialog').showModal()}
@@ -88,27 +89,49 @@ $('add-form').onsubmit=async e=>{e.preventDefault();$('add-error').textContent='
 $('track').onclick=e=>{const detail=e.target.closest('[data-detail]');if(detail){index=list.indexOf(detail.dataset.detail);setView('card');return;}const hb=e.target.closest('[data-history]');if(hb)openHistory(hb.dataset.history);const remove=e.target.closest('[data-remove]'),flip=e.target.closest('[data-flip]');if(remove){toRemove=remove.dataset.remove;const d=cache[toRemove];$('remove-label').textContent=d?d.tokens.map(x=>x.symbol).join(' / ')+' · '+d.network+' · #'+d.id:toRemove;$('remove-dialog').showModal()}if(flip){const key=flip.dataset.flip;flipped[key]=!(flipped[key]??['USDC','USDT','DAI','USDS'].includes(cache[key].tokens[0].symbol));render()}if(e.target.closest('[data-add]'))addOpen();if(e.target.closest('[data-retry]'))refresh()};
 $('remove').onclick=()=>{list=list.filter(x=>x!==toRemove);delete cache[toRemove];delete histories[toRemove];delete errors[toRemove];persist();render();$('remove-dialog').close();toast('Position removed')};
 function go(i){if(view==='list')return;index=Math.max(0,Math.min(list.length-1,i));const track=$('track'),slide=track.children[index];if(slide)track.scrollTo({left:slide.offsetLeft-track.children[0].offsetLeft,behavior:matchMedia('(prefers-reduced-motion:reduce)').matches?'auto':'smooth'})}
-// Swiping past the beginning of the card carousel returns to the summary.
-let firstCardSwipe=null;
+// Reveal the summary as the page immediately before the first card.
+let firstCardSwipe=null,swipeSettling=false;
+const swipeStage=document.createElement('div');swipeStage.className='swipe-stage';
+$('track').before(swipeStage);swipeStage.append($('track'));
+function paintBackSwipe(distance){
+ const track=$('track'),width=swipeStage.clientWidth,x=Math.max(0,Math.min(width,distance));
+ track.style.transform='translate3d('+x+'px,0,0)';
+ swipeStage.querySelector('.swipe-preview').style.transform='translate3d('+(x-width)+'px,0,0)';
+}
+function finishBackSwipe(commit=false){
+ const start=firstCardSwipe;firstCardSwipe=null;
+ if(!start?.dragging)return;
+ swipeSettling=true;
+ const track=$('track'),preview=swipeStage.querySelector('.swipe-preview'),reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+ const transition=reduce?'none':'transform 260ms cubic-bezier(.22,.61,.36,1)';
+ track.style.transition=preview.style.transition=transition;
+ paintBackSwipe(commit?swipeStage.clientWidth:0);
+ setTimeout(()=>{preview.remove();track.style.transform='';track.style.transition='';track.style.willChange='';swipeStage.classList.remove('swiping');swipeSettling=false;if(commit)setView('list');else render()},reduce?0:270);
+}
 $('track').addEventListener('touchstart',e=>{
+ if(swipeSettling)return;
  firstCardSwipe=null;
  if(view!=='card'||!list.length||$('track').scrollLeft>2||e.touches.length!==1||e.target.closest('button,a,input,select,textarea'))return;
- firstCardSwipe={x:e.touches[0].clientX,y:e.touches[0].clientY};
+ firstCardSwipe={x:e.touches[0].clientX,y:e.touches[0].clientY,dragging:false};
 },{passive:true});
 $('track').addEventListener('touchmove',e=>{
  if(!firstCardSwipe)return;
- if(e.touches.length!==1){firstCardSwipe=null;return}
+ if(e.touches.length!==1){finishBackSwipe();return}
  const dx=e.touches[0].clientX-firstCardSwipe.x,dy=e.touches[0].clientY-firstCardSwipe.y;
- if(Math.abs(dy)>12&&Math.abs(dy)>=Math.abs(dx)||dx< -12){firstCardSwipe=null;return}
- if(dx>12&&dx>Math.abs(dy)*1.5&&e.cancelable)e.preventDefault();
+ if(!firstCardSwipe.dragging&&(Math.abs(dy)>12&&Math.abs(dy)>=Math.abs(dx)||dx< -12)){firstCardSwipe=null;return}
+ if(!firstCardSwipe.dragging&&dx>12&&dx>Math.abs(dy)*1.5){
+  firstCardSwipe.dragging=true;
+  const preview=document.createElement('section');preview.className='track list-view swipe-preview';preview.setAttribute('aria-hidden','true');preview.inert=true;
+  preview.innerHTML=list.map(url=>'<div class="slide">'+summary(url)+'</div>').join('');swipeStage.prepend(preview);swipeStage.classList.add('swiping');$('track').style.willChange='transform';
+ }
+ if(firstCardSwipe.dragging){if(e.cancelable)e.preventDefault();paintBackSwipe(dx)}
 },{passive:false});
 $('track').addEventListener('touchend',e=>{
- const start=firstCardSwipe;firstCardSwipe=null;
- if(!start||view!=='card'||!e.changedTouches.length)return;
- const dx=e.changedTouches[0].clientX-start.x,dy=e.changedTouches[0].clientY-start.y;
- if(dx>=60&&dx>Math.abs(dy)*1.5)setView('list');
+ if(!firstCardSwipe)return;
+ const start=firstCardSwipe,touch=e.changedTouches[0];
+ finishBackSwipe(!!touch&&touch.clientX-start.x>=Math.min(100,swipeStage.clientWidth*.25));
 },{passive:true});
-$('track').addEventListener('touchcancel',()=>{firstCardSwipe=null},{passive:true});
+$('track').addEventListener('touchcancel',()=>finishBackSwipe(),{passive:true});
 $('dots').onclick=e=>{const b=e.target.closest('[data-index]');if(b)go(+b.dataset.index)};let scrollTimer;$('track').addEventListener('scroll',()=>{if(view==='list')return;clearTimeout(scrollTimer);scrollTimer=setTimeout(()=>{const track=$('track'),width=track.children[1]?track.children[1].offsetLeft-track.children[0].offsetLeft:track.clientWidth;index=Math.round(track.scrollLeft/width);document.querySelectorAll('[data-index]').forEach((b,i)=>{b.classList.toggle('active',i===index);b.setAttribute('aria-current',String(i===index))})},80)},{passive:true});$('track').onkeydown=e=>{if(e.key==='ArrowRight'){e.preventDefault();go(index+1)}if(e.key==='ArrowLeft'){e.preventDefault();go(index-1)}};
 function online(){$('offline').hidden=navigator.onLine;if(navigator.onLine)refresh()}window.addEventListener('online',online);window.addEventListener('offline',online);document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh()});setInterval(()=>{if(!document.hidden)refresh()},60000);window.addEventListener('resize',()=>go(index));function txURL(chain,hash){const hosts={base:'basescan.org',ethereum:'etherscan.io',arbitrum:'arbiscan.io',optimism:'optimistic.etherscan.io',polygon:'polygonscan.com'};return /^0x[0-9a-f]{64}$/i.test(hash||'')?'https://'+hosts[chain]+'/tx/'+hash:'#'}
 async function loadHistory(url,force=false){if(historyBusy.has(url)||!force&&histories[url]?.status==='current'&&(histories[url]?.rows?.length||histories[url]?.openedAt)&&histories[url]?.fetchedAt&&Date.now()-histories[url].fetchedAt<300000)return;historyBusy.add(url);render();if(historyURL===url&&$('history-dialog').open)renderHistory();try{if(!cache[url])return;const h=await positionHistory(cache[url],histories[url]);if(h.status==='unavailable')throw Error(h.error||'Claim history unavailable');if(list.includes(url)){histories[url]={...h,fetchedAt:Date.now()};persist();render();if(historyURL===url&&$('history-dialog').open)renderHistory()}}catch{if(histories[url]?.rows?.length||histories[url]?.openedAt)histories[url].status='saved';else histories[url]={status:'unavailable',rows:[]};persist();render();if(historyURL===url&&$('history-dialog').open)renderHistory()}finally{historyBusy.delete(url);render();if(historyURL===url&&$('history-dialog').open)renderHistory()}}
