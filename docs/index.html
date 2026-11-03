@@ -86,7 +86,7 @@ function portfolioTotals(){
  }
  const pending=valid<list.length;
  const dailyLabel=valid?'≈ '+cash(daily)+' / day':'—';
- const apyLabel=capital>0?percent(weighted/capital):'—';
+ const apyLabel=capital>0?'≈ '+(100*weighted/capital).toLocaleString('en-US',{maximumFractionDigits:2})+'%':'—';
  return '<div class="yield-grid portfolio-yield" aria-label="Portfolio estimates"><div class="yield-cell"><div class="label">Total est. daily earnings</div><strong class="private">'+dailyLabel+'</strong></div><div class="yield-cell apy"><div class="label">Blended est. APY</div><strong>'+apyLabel+'</strong></div></div>'+(pending?'<p class="portfolio-note">Based on '+valid+' of '+list.length+' positions with available estimates</p>':'');
 }
 function updatePortfolioTotals(){
