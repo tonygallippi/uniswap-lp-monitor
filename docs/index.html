@@ -101,7 +101,13 @@ function updateCarouselUI(){
  $('view-card').setAttribute('aria-pressed',String(!isList));$('view-list').setAttribute('aria-pressed',String(isList));
  $('hint').textContent='';
  document.querySelectorAll('[data-index]').forEach((b,i)=>{b.classList.toggle('active',!isList&&i===index);b.setAttribute('aria-current',String(!isList&&i===index))});
- const track=$('track'),slide=track.children[isList?0:index+1];if(slide)track.style.height=(slide.offsetHeight+7)+'px';
+ // Reserve the full height of the current and adjacent slides before swiping.
+ // Otherwise the horizontally clipped peek is cut off at the overview height
+ // until the carousel settles on the taller card.
+ const track=$('track'),page=isList?0:index+1;
+ const nearby=[page-1,page,page+1].filter(i=>i>=0&&i<track.children.length);
+ const height=Math.max(0,...nearby.map(i=>track.children[i].offsetHeight));
+ if(height)track.style.height=(height+7)+'px';
 }
 function scrollPage(page,behavior='smooth'){
  const track=$('track'),slide=track.children[page];if(!slide)return;
