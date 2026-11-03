@@ -145,12 +145,53 @@ $('privacy').onclick=()=>{document.documentElement.classList.toggle('privacy');t
 $('start').onclick=()=>{$('splash').hidden=true;$('app-main').inert=false;$('add').focus()};
 
 
-// Top-of-page vertical gesture; horizontal swipes stay with the position carousel.
+// Native-feeling vertical pull on the whole view; horizontal carousel gestures remain independent.
 let pullStart=null,pullDistance=0,pullActive=false,pullRefreshing=false;
-function resetPull(){pullStart=null;pullDistance=0;pullActive=false;if(!pullRefreshing){$('pull-refresh').hidden=true;$('pull-refresh').classList.remove('loading')}}
-document.addEventListener('touchstart',e=>{if(e.touches.length!==1||window.scrollY>0||busy||pullRefreshing||!$('splash').hidden||document.querySelector('dialog[open]')||e.target.closest('button,input,a,select,textarea'))return;pullStart={x:e.touches[0].clientX,y:e.touches[0].clientY};pullDistance=0;pullActive=false},{passive:true});
-document.addEventListener('touchmove',e=>{if(!pullStart||e.touches.length!==1)return;const dx=e.touches[0].clientX-pullStart.x,dy=e.touches[0].clientY-pullStart.y;if(!pullActive&&Math.abs(dx)>12&&Math.abs(dx)>Math.abs(dy)){resetPull();return}if(dy<0||window.scrollY>0){resetPull();return}if(dy>12&&dy>Math.abs(dx)*1.2)pullActive=true;if(!pullActive)return;if(e.cancelable)e.preventDefault();pullDistance=dy;const ready=dy>=85;$('pull-refresh').hidden=false;$('pull-symbol').textContent=ready?'↻':'↓';$('pull-text').textContent=ready?'Release to refresh':'Pull to refresh';$('pull-refresh').style.transform='translate(-50%,'+Math.min(35,dy*.25)+'px)'},{passive:false});
-document.addEventListener('touchend',async()=>{const trigger=pullActive&&pullDistance>=85;pullStart=null;pullActive=false;pullDistance=0;if(!trigger){resetPull();return}if(!navigator.onLine){resetPull();toast('You’re offline. Reconnect to refresh.');return}pullRefreshing=true;$('pull-refresh').hidden=false;$('pull-refresh').classList.add('loading');$('pull-symbol').textContent='↻';$('pull-text').textContent='Refreshing…';try{await refresh(true)}finally{pullRefreshing=false;resetPull()}},{passive:true});
+const pullMain=$('app-main'),pullIndicator=$('pull-refresh');
+document.body.appendChild(pullIndicator); // Keep the fixed indicator outside the moving page.
+const pullThreshold=85;
+function pullOffset(distance){return Math.min(115,distance*.62/(1+distance/260))}
+function movePull(distance,animate=false){
+ pullMain.style.transition=animate?'transform .38s cubic-bezier(.2,.8,.2,1)':'none';
+ pullMain.style.transform=distance?'translate3d(0,'+distance+'px,0)':'';
+}
+function resetPull(){
+ pullStart=null;pullDistance=0;pullActive=false;
+ movePull(0,true);
+ if(!pullRefreshing){pullIndicator.hidden=true;pullIndicator.classList.remove('loading');pullIndicator.style.transform=''}
+}
+document.addEventListener('touchstart',e=>{
+ if(e.touches.length!==1||window.scrollY>1||busy||pullRefreshing||!$('splash').hidden||document.querySelector('dialog[open]')||e.target.closest('button,input,a,select,textarea'))return;
+ pullStart={x:e.touches[0].clientX,y:e.touches[0].clientY};pullDistance=0;pullActive=false;
+},{passive:true});
+document.addEventListener('touchmove',e=>{
+ if(!pullStart||e.touches.length!==1)return;
+ const dx=e.touches[0].clientX-pullStart.x,dy=e.touches[0].clientY-pullStart.y;
+ if(!pullActive&&Math.abs(dx)>12&&Math.abs(dx)>Math.abs(dy)){resetPull();return}
+ if(dy<0||window.scrollY>1){resetPull();return}
+ if(dy>12&&dy>Math.abs(dx)*1.2)pullActive=true;
+ if(!pullActive)return;
+ if(e.cancelable)e.preventDefault();
+ pullDistance=dy;
+ const ready=dy>=pullThreshold;
+ pullIndicator.hidden=false;
+ $('pull-symbol').textContent=ready?'↻':'↓';
+ $('pull-text').textContent=ready?'Release to refresh':'Pull to refresh';
+ const offset=pullOffset(dy);
+ movePull(offset);
+ pullIndicator.style.transform='translate(-50%,'+Math.min(35,offset*.35)+'px)';
+},{passive:false});
+document.addEventListener('touchend',async()=>{
+ if(!pullStart&&!pullActive)return;
+ const trigger=pullActive&&pullDistance>=pullThreshold;
+ pullStart=null;pullActive=false;pullDistance=0;
+ if(!trigger){resetPull();return}
+ if(!navigator.onLine){resetPull();toast('You’re offline. Reconnect to refresh.');return}
+ pullRefreshing=true;pullIndicator.hidden=false;pullIndicator.classList.add('loading');
+ $('pull-symbol').textContent='↻';$('pull-text').textContent='Refreshing…';
+ movePull(55,true);
+ try{await refresh(true)}finally{pullRefreshing=false;resetPull()}
+},{passive:true});
 document.addEventListener('touchcancel',resetPull,{passive:true});
 
 $('offline').hidden=navigator.onLine;render();refresh();if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{});
