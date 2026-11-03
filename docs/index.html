@@ -24,7 +24,7 @@ main{padding:calc(env(safe-area-inset-top) + 8px) 0 max(10px,env(safe-area-inset
 .cardtop{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:start}.cardtop .pair{display:contents}.cardtop .pair>.coins{grid-column:1;grid-row:1;display:flex;margin-top:0}.cardtop .pair>div:last-child{display:contents}.cardtop .pair h2{grid-column:2;grid-row:1}.cardtop>.status{grid-column:3;grid-row:1}.cardtop .meta{grid-column:1 / -1;grid-row:2;white-space:nowrap;font-size:clamp(10px,2.85vw,13px)}.cardtop .meta .owner-address{display:inline;margin:0;font-size:inherit;letter-spacing:normal}
 .summary-owner{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:inherit;color:#8d9db4}.summary-top{display:grid;grid-template-columns:minmax(0,1fr) auto}.summary-top>div{display:contents}.summary-top h2{grid-column:1;grid-row:1}.summary-top .status{grid-column:2;grid-row:1}.summary-top .meta{grid-column:1 / -1;grid-row:2;line-height:1.5;overflow-wrap:anywhere}
 .start{position:relative;justify-content:center;align-items:center;text-align:center}.start>span{position:absolute;right:20px}
-.track{align-items:flex-start;overflow-y:hidden;touch-action:pan-x pinch-zoom;overscroll-behavior-y:contain}.track.on-overview{touch-action:pan-x pan-y pinch-zoom}.summary-stack{display:flex;flex-direction:column;gap:12px}.overview-slide{min-width:0}
+.track{align-items:flex-start;overflow-y:hidden;touch-action:pan-x pinch-zoom;overscroll-behavior-y:contain}.track.on-overview{touch-action:pan-x pan-y pinch-zoom;overscroll-behavior-y:contain}.summary-stack{display:flex;flex-direction:column;gap:12px}.overview-slide{min-width:0}
 
 .summary-top .summary-identity{grid-column:1;grid-row:1;display:flex;align-items:center;gap:8px;min-width:0}.summary .coins{display:flex;flex-shrink:0}.summary-identity h2{min-width:0;overflow-wrap:anywhere}
 
@@ -151,6 +151,12 @@ const pullMain=$('app-main'),pullIndicator=$('pull-refresh');
 document.body.appendChild(pullIndicator); // Keep the fixed indicator outside the moving page.
 const pullThreshold=85;
 function pullOffset(distance){return Math.min(115,distance*.62/(1+distance/260))}
+function atPullTop(){
+ // The overview/list can be much taller than the viewport. Only pull once
+ // its scrolling content has reached the top, just like the position cards.
+ const scroller=document.scrollingElement||document.documentElement;
+ return scroller.scrollTop<=1 && window.scrollY<=1;
+}
 function movePull(distance,animate=false){
  pullMain.style.transition=animate?'transform .38s cubic-bezier(.2,.8,.2,1)':'none';
  pullMain.style.transform=distance?'translate3d(0,'+distance+'px,0)':'';
@@ -161,14 +167,14 @@ function resetPull(){
  if(!pullRefreshing){pullIndicator.hidden=true;pullIndicator.classList.remove('loading');pullIndicator.style.transform=''}
 }
 document.addEventListener('touchstart',e=>{
- if(e.touches.length!==1||window.scrollY>1||busy||pullRefreshing||!$('splash').hidden||document.querySelector('dialog[open]')||e.target.closest('button,input,a,select,textarea'))return;
+ if(e.touches.length!==1||!atPullTop()||busy||pullRefreshing||!$('splash').hidden||document.querySelector('dialog[open]')||e.target.closest('button,input,a,select,textarea'))return;
  pullStart={x:e.touches[0].clientX,y:e.touches[0].clientY};pullDistance=0;pullActive=false;
 },{passive:true});
 document.addEventListener('touchmove',e=>{
  if(!pullStart||e.touches.length!==1)return;
  const dx=e.touches[0].clientX-pullStart.x,dy=e.touches[0].clientY-pullStart.y;
  if(!pullActive&&Math.abs(dx)>12&&Math.abs(dx)>Math.abs(dy)){resetPull();return}
- if(dy<0||window.scrollY>1){resetPull();return}
+ if(dy<0||!atPullTop()){resetPull();return}
  if(dy>12&&dy>Math.abs(dx)*1.2)pullActive=true;
  if(!pullActive)return;
  if(e.cancelable)e.preventDefault();
