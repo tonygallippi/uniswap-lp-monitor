@@ -85,7 +85,7 @@ function saveView(){try{localStorage.setItem('lp-monitor:view',view)}catch{}}
 function updateCarouselUI(){
  const isList=view==='list';$('track').classList.toggle('on-overview',isList);$('dots').hidden=isList;
  $('view-card').setAttribute('aria-pressed',String(!isList));$('view-list').setAttribute('aria-pressed',String(isList));
- $('hint').textContent=isList&&list.length?'Tap a position to view its card':list.length?'Swipe to explore your positions':'';
+ $('hint').textContent='';
  document.querySelectorAll('[data-index]').forEach((b,i)=>{b.classList.toggle('active',!isList&&i===index);b.setAttribute('aria-current',String(!isList&&i===index))});
  const track=$('track'),slide=track.children[isList?0:index+1];if(slide)track.style.height=(slide.offsetHeight+7)+'px';
 }
