@@ -41,7 +41,7 @@ async function latestBaseClaims(p){
   const d=await r.json();if(!r.ok||d.error||d.result==null)throw Error('Recent claim verification unavailable');return d.result;
  };
  // A Base claim from several hours ago can be thousands of blocks back.
- const floor=Math.max(0,head-24000),hex=n=>'0x'+n.toString(16);
+ const floor=Math.max(0,head-48000),hex=n=>'0x'+n.toString(16);
  for(let end=head;end>=floor;end-=2000){
   const start=Math.max(floor,end-1999);
   const logs=await call('eth_getLogs',[{address:manager,fromBlock:hex(start),toBlock:hex(end),topics:[COLLECT,topic]}]);
@@ -66,10 +66,10 @@ export async function positionHistory(position,previous={}){
  const rows=logs.map(l=>{const w=words(l.data);return {hash:l.transactionHash,index:Number(l.logIndex),timestamp:Number(l.timeStamp),amounts:[Number(uint(w[1]))/10**p.tokens[0].decimals,Number(uint(w[2]))/10**p.tokens[1].decimals]}});
  if(rows.some(r=>!/^0x[0-9a-f]{64}$/i.test(r.hash)||!(r.timestamp>0)||!r.amounts.every(a=>Number.isFinite(a)&&a>=0)))throw Error('Invalid history');
  let openedAt=previous.openedAt||null;if(!rows.length){try{openedAt=await openingTime(p,previous)}catch{}}
- if(!rows.length&&!openedAt)return await recentRpcHistory(position,previous);
+ if(!rows.length&&!openedAt&&!(previous.rows||[]).length)return await recentRpcHistory(position,previous);
  let verified=[];try{verified=await latestBaseClaims(p)}catch(e){console.warn('Recent claim verification unavailable',e)}
- const merged=[...new Map([...rows,...verified].map(r=>[r.hash+':'+r.index,r])).values()].sort((a,b)=>b.timestamp-a.timestamp);
- const h={status:'current',openedAt,source:verified.length?'On-chain events + recent RPC verification':'On-chain events',partial:false,checkedAt:new Date().toISOString(),rows:merged,principalWarning:withdrawals.length>0};h.metrics=yieldMetrics(position,h);return h;
+ const merged=[...new Map([...(previous.rows||[]),...rows,...verified].map(r=>[r.hash+':'+r.index,r])).values()].sort((a,b)=>b.timestamp-a.timestamp);
+ const h={status:'current',openedAt,source:verified.length?'On-chain events + recent RPC verification':'On-chain events',partial:false,checkedAt:new Date().toISOString(),rows:merged,principalWarning:withdrawals.length>0||!!previous.principalWarning};h.metrics=yieldMetrics(position,h);return h;
  }catch{try{return await recentRpcHistory(position,previous)}catch{}return {status:'unavailable',rows:[],checkedAt:null,error:'Claim history temporarily unavailable from the public explorer. Refresh to retry.'}}
 }
 
