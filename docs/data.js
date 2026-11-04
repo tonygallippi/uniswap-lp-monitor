@@ -50,6 +50,37 @@ async function openingTime(p,previous={}){
  }
  return null;
 }
+// Verify the newest Base claim against the chain, even when Blockscout returns
+// a successful but lagging indexed response. Scan recent blocks only; never
+// replace complete explorer history with this partial window.
+async function latestBaseClaims(p){
+ if(p.chain!=='base'||!Number.isSafeInteger(p.block))return [];
+ const manager=CHAINS.base.manager,topic='0x'+word(p.id),head=p.block;
+ const endpoint='https://base.gateway.tenderly.co';
+ const call=async(method,params)=>{
+  const r=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method,params}),signal:AbortSignal.timeout(10000)});
+  const d=await r.json();if(!r.ok||d.error||d.result==null)throw Error('Recent claim verification unavailable');return d.result;
+ };
+ // A Base claim from several hours ago can be thousands of blocks back.
+ const floor=Math.max(0,head-24000),hex=n=>'0x'+n.toString(16);
+ for(let end=head;end>=floor;end-=2000){
+  const start=Math.max(floor,end-1999);
+  const logs=await call('eth_getLogs',[{address:manager,fromBlock:hex(start),toBlock:hex(end),topics:[COLLECT,topic]}]);
+  if(!Array.isArray(logs))throw Error('Invalid recent claims');
+  if(logs.length){
+   const blocks=new Map();
+   await Promise.all([...new Set(logs.map(l=>l.blockNumber))].map(async block=>{
+    const b=await call('eth_getBlockByNumber',[block,false]);blocks.set(block,Number(BigInt(b.timestamp)));
+   }));
+   return logs.map(l=>{
+    if(l.removed||l.address?.toLowerCase()!==manager||l.topics?.[0]?.toLowerCase()!==COLLECT||l.topics?.[1]?.toLowerCase()!==topic)throw Error('Invalid recent claim log');
+    const w=words(l.data);
+    return {hash:l.transactionHash,index:Number(BigInt(l.logIndex)),timestamp:blocks.get(l.blockNumber),amounts:[Number(uint(w[1]))/10**p.tokens[0].decimals,Number(uint(w[2]))/10**p.tokens[1].decimals]};
+   });
+  }
+ }
+ return [];
+}
 export async function positionHistory(position,previous={}){
  const p=position;
  try{const [logs,withdrawals]=await Promise.all([explorerLogs(p,COLLECT),explorerLogs(p,DECREASE)]);
@@ -57,7 +88,9 @@ export async function positionHistory(position,previous={}){
  if(rows.some(r=>!/^0x[0-9a-f]{64}$/i.test(r.hash)||!(r.timestamp>0)||!r.amounts.every(a=>Number.isFinite(a)&&a>=0)))throw Error('Invalid history');
  let openedAt=previous.openedAt||null;if(!rows.length){try{openedAt=await openingTime(p,previous)}catch{}}
  if(!rows.length&&!openedAt)return await recentRpcHistory(position,previous);
- const h={status:'current',openedAt,source:'On-chain events',partial:false,checkedAt:new Date().toISOString(),rows:[...new Map(rows.map(r=>[r.hash+':'+r.index,r])).values()].sort((a,b)=>b.timestamp-a.timestamp),principalWarning:withdrawals.length>0};h.metrics=yieldMetrics(position,h);return h;
+ let verified=[];try{verified=await latestBaseClaims(p)}catch(e){console.warn('Recent claim verification unavailable',e)}
+ const merged=[...new Map([...rows,...verified].map(r=>[r.hash+':'+r.index,r])).values()].sort((a,b)=>b.timestamp-a.timestamp);
+ const h={status:'current',openedAt,source:verified.length?'On-chain events + recent RPC verification':'On-chain events',partial:false,checkedAt:new Date().toISOString(),rows:merged,principalWarning:withdrawals.length>0};h.metrics=yieldMetrics(position,h);return h;
  }catch{try{return await recentRpcHistory(position,previous)}catch{}return {status:'unavailable',rows:[],checkedAt:null,error:'Claim history temporarily unavailable from the public explorer. Refresh to retry.'}}
 }
 
