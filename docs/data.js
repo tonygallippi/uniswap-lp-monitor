@@ -109,7 +109,7 @@ export async function positionHistory(position,previous={}){
   }catch(e){rpcError=e}
   try{return await recentRpcHistory(position,previous)}catch(e){rpcError=e}
   return {status:'unavailable',rows:[],checkedAt:null,error:'Explorer: '+(explorerError?.message||'unavailable')+'; RPC: '+(rpcError?.message||'no recent claim detected')};
- }}
+ }
 }
 
 // Public RPC fallback: scan backwards to establish the latest claim, rather
