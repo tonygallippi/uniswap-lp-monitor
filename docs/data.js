@@ -96,7 +96,20 @@ export async function positionHistory(position,previous={}){
  let verified=[],verificationError=null;try{verified=await latestBaseClaims(p)}catch(e){verificationError=e.message;console.warn('Recent claim verification unavailable',e)}
  const merged=[...new Map([...(previous.rows||[]),...rows,...verified].map(r=>[r.hash+':'+r.index,r])).values()].sort((a,b)=>b.timestamp-a.timestamp);
  const h={status:'current',openedAt,source:verified.length?'On-chain events + recent RPC verification':'On-chain events',verificationError,partial:!!verificationError,checkedAt:new Date().toISOString(),rows:merged,principalWarning:withdrawals.length>0||!!previous.principalWarning};h.metrics=yieldMetrics(position,h);return h;
- }catch{try{return await recentRpcHistory(position,previous)}catch{}return {status:'unavailable',rows:[],checkedAt:null,error:'Claim history temporarily unavailable from the public explorer. Refresh to retry.'}}
+ }catch(explorerError){
+  // Explorer failure must not prevent an independent recent-claim check.
+  let rpcError=null;
+  try{
+   const verified=await latestBaseClaims(p);
+   if(verified.length){
+    const rows=[...new Map([...(previous.rows||[]),...verified].map(r=>[r.hash+':'+r.index,r])).values()].sort((a,b)=>b.timestamp-a.timestamp);
+    const h={status:'current',source:'Direct Base RPC (explorer unavailable)',openedAt:previous.openedAt||null,checkedAt:new Date().toISOString(),rows,partial:true,principalWarning:!!previous.principalWarning,verificationError:'Explorer unavailable; lifetime history may be incomplete'};
+    h.metrics=yieldMetrics(position,h);return h;
+   }
+  }catch(e){rpcError=e}
+  try{return await recentRpcHistory(position,previous)}catch(e){rpcError=e}
+  return {status:'unavailable',rows:[],checkedAt:null,error:'Explorer: '+(explorerError?.message||'unavailable')+'; RPC: '+(rpcError?.message||'no recent claim detected')};
+ }}
 }
 
 // Public RPC fallback: scan backwards to establish the latest claim, rather
