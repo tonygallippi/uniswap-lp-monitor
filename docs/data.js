@@ -56,10 +56,15 @@ async function openingTime(p,previous={}){
 async function latestBaseClaims(p){
  if(p.chain!=='base'||!Number.isSafeInteger(p.block))return [];
  const manager=CHAINS.base.manager,topic='0x'+word(p.id),head=p.block;
- const endpoint='https://base.gateway.tenderly.co';
+ const endpoints=['https://base-rpc.publicnode.com','https://base.gateway.tenderly.co','https://mainnet.base.org'];
  const call=async(method,params)=>{
-  const r=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method,params}),signal:AbortSignal.timeout(10000)});
-  const d=await r.json();if(!r.ok||d.error||d.result==null)throw Error('Recent claim verification unavailable');return d.result;
+  let last;
+  for(const endpoint of endpoints){
+   try{const r=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method,params}),signal:AbortSignal.timeout(10000)});
+    const d=await r.json();if(!r.ok||d.error||d.result==null)throw Error(d.error?.message||'RPC unavailable');return d.result;
+   }catch(e){last=e}
+  }
+  throw Error('Recent claim verification failed across all Base RPC sources: '+(last?.message||'unknown'));
  };
  // A Base claim from several hours ago can be thousands of blocks back.
  const floor=Math.max(0,head-48000),hex=n=>'0x'+n.toString(16);
@@ -88,9 +93,9 @@ export async function positionHistory(position,previous={}){
  if(rows.some(r=>!/^0x[0-9a-f]{64}$/i.test(r.hash)||!(r.timestamp>0)||!r.amounts.every(a=>Number.isFinite(a)&&a>=0)))throw Error('Invalid history');
  let openedAt=previous.openedAt||null;if(!rows.length){try{openedAt=await openingTime(p,previous)}catch{}}
  if(!rows.length&&!openedAt&&!(previous.rows||[]).length)return await recentRpcHistory(position,previous);
- let verified=[];try{verified=await latestBaseClaims(p)}catch(e){console.warn('Recent claim verification unavailable',e)}
+ let verified=[],verificationError=null;try{verified=await latestBaseClaims(p)}catch(e){verificationError=e.message;console.warn('Recent claim verification unavailable',e)}
  const merged=[...new Map([...(previous.rows||[]),...rows,...verified].map(r=>[r.hash+':'+r.index,r])).values()].sort((a,b)=>b.timestamp-a.timestamp);
- const h={status:'current',openedAt,source:verified.length?'On-chain events + recent RPC verification':'On-chain events',partial:false,checkedAt:new Date().toISOString(),rows:merged,principalWarning:withdrawals.length>0||!!previous.principalWarning};h.metrics=yieldMetrics(position,h);return h;
+ const h={status:'current',openedAt,source:verified.length?'On-chain events + recent RPC verification':'On-chain events',verificationError,partial:!!verificationError,checkedAt:new Date().toISOString(),rows:merged,principalWarning:withdrawals.length>0||!!previous.principalWarning};h.metrics=yieldMetrics(position,h);return h;
  }catch{try{return await recentRpcHistory(position,previous)}catch{}return {status:'unavailable',rows:[],checkedAt:null,error:'Claim history temporarily unavailable from the public explorer. Refresh to retry.'}}
 }
 
