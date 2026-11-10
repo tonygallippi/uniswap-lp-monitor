@@ -67,7 +67,7 @@ async function latestBaseClaims(p){
   throw Error('Recent claim verification failed across all Base RPC sources: '+(last?.message||'unknown'));
  };
  // A Base claim from several hours ago can be thousands of blocks back.
- const floor=Math.max(0,head-48000),hex=n=>'0x'+n.toString(16);
+ const floor=Math.max(0,head-160000),hex=n=>'0x'+n.toString(16);
  for(let end=head;end>=floor;end-=2000){
   const start=Math.max(floor,end-1999);
   const logs=await call('eth_getLogs',[{address:manager,fromBlock:hex(start),toBlock:hex(end),topics:[COLLECT,topic]}]);
@@ -93,7 +93,7 @@ export async function positionHistory(position,previous={}){
  if(rows.some(r=>!/^0x[0-9a-f]{64}$/i.test(r.hash)||!(r.timestamp>0)||!r.amounts.every(a=>Number.isFinite(a)&&a>=0)))throw Error('Invalid history');
  let openedAt=previous.openedAt||null;if(!rows.length){try{openedAt=await openingTime(p,previous)}catch{}}
  if(!rows.length&&!openedAt&&!(previous.rows||[]).length)return await recentRpcHistory(position,previous);
- let verified=[],verificationError=null;try{verified=await latestBaseClaims(p)}catch(e){verificationError=e.message;console.warn('Recent claim verification unavailable',e)}
+ let verified=[],verificationError=null;try{verified=await latestBaseClaims(p);if(p.chain==='base'&&!verified.length)verificationError='No recent Collect events found in the last 160,000 Base blocks; explorer results have not been independently verified'}catch(e){verificationError=e.message;console.warn('Recent claim verification unavailable',e)}
  const merged=[...new Map([...(previous.rows||[]),...rows,...verified].map(r=>[r.hash+':'+r.index,r])).values()].sort((a,b)=>b.timestamp-a.timestamp);
  const h={status:'current',openedAt,source:verified.length?'On-chain events + recent RPC verification':'On-chain events',verificationError,partial:!!verificationError,checkedAt:new Date().toISOString(),rows:merged,principalWarning:withdrawals.length>0||!!previous.principalWarning};h.metrics=yieldMetrics(position,h);return h;
  }catch(explorerError){
