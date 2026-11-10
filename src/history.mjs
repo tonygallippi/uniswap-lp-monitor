@@ -65,6 +65,13 @@ async function latestBaseClaims(p){
  }
  return [];
 }
+const BASE_CLAIM_CHECKPOINTS={'6079991':['0xfdfa589606e03325c22e864b347718a4a3615429b2e3f23019293695cc45d5bb']};
+async function checkpointClaims(p){
+ const hashes=p.chain==='base'?BASE_CLAIM_CHECKPOINTS[String(p.id)]||[]:[];
+ const urls=['https://base-rpc.publicnode.com','https://mainnet.base.org','https://base.gateway.tenderly.co'];
+ const rpc=async(method,params)=>{let last;for(const url of urls)try{const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method,params}),signal:AbortSignal.timeout(10000)});const d=await r.json();if(!r.ok||d.error||d.result==null)throw Error(d.error?.message||'RPC error');return d.result}catch(e){last=e}throw last};
+ const rows=[];for(const hash of hashes){const receipt=await rpc('eth_getTransactionReceipt',[hash]);if(receipt.status!=='0x1')continue;const logs=receipt.logs.filter(l=>l.address?.toLowerCase()===CHAINS.base.manager&&l.topics?.[0]?.toLowerCase()===COLLECT&&l.topics?.[1]?.toLowerCase()==='0x'+word(p.id));if(!logs.length)continue;const block=await rpc('eth_getBlockByNumber',[receipt.blockNumber,false]);for(const log of logs){const w=words(log.data);rows.push({hash,index:Number(BigInt(log.logIndex)),timestamp:Number(BigInt(block.timestamp)),amounts:[Number(uint(w[1]))/10**p.tokens[0].decimals,Number(uint(w[2]))/10**p.tokens[1].decimals]})}}return rows;
+}
 export async function positionHistory(position,previous={}){
  const p=position;
  try{const [logs,withdrawals]=await Promise.all([explorerLogs(p,COLLECT),explorerLogs(p,DECREASE)]);
@@ -73,15 +80,17 @@ export async function positionHistory(position,previous={}){
  let openedAt=previous.openedAt||null;if(!rows.length){try{openedAt=await openingTime(p,previous)}catch{}}
  if(!rows.length&&!openedAt&&!(previous.rows||[]).length)return await recentRpcHistory(position,previous);
  let verified=[],verificationError=null;try{verified=await latestBaseClaims(p);if(p.chain==='base'&&!verified.length)verificationError='No recent Collect events found in the last 160,000 Base blocks; explorer results have not been independently verified'}catch(e){verificationError=e.message;console.warn('Recent claim verification unavailable',e)}
- const merged=[...new Map([...(previous.rows||[]),...rows,...verified].map(r=>[r.hash+':'+r.index,r])).values()].sort((a,b)=>b.timestamp-a.timestamp);
+ let checkpoints=[];try{checkpoints=await checkpointClaims(p)}catch(e){console.warn('Claim checkpoint verification failed',e)}
+ const merged=[...new Map([...(previous.rows||[]),...rows,...verified,...checkpoints].map(r=>[r.hash+':'+r.index,r])).values()].sort((a,b)=>b.timestamp-a.timestamp);
  const h={status:'current',openedAt,source:verified.length?'On-chain events + recent RPC verification':'On-chain events',verificationError,partial:!!verificationError,checkedAt:new Date().toISOString(),rows:merged,principalWarning:withdrawals.length>0||!!previous.principalWarning};h.metrics=yieldMetrics(position,h);return h;
  }catch(explorerError){
   // Explorer failure must not prevent an independent recent-claim check.
   let rpcError=null;
   try{
    const verified=await latestBaseClaims(p);
-   if(verified.length){
-    const rows=[...new Map([...(previous.rows||[]),...verified].map(r=>[r.hash+':'+r.index,r])).values()].sort((a,b)=>b.timestamp-a.timestamp);
+   let checkpoints=[];try{checkpoints=await checkpointClaims(p)}catch(e){console.warn('Claim checkpoint verification failed',e)}
+   if(verified.length||checkpoints.length){
+    const rows=[...new Map([...(previous.rows||[]),...verified,...checkpoints].map(r=>[r.hash+':'+r.index,r])).values()].sort((a,b)=>b.timestamp-a.timestamp);
     const h={status:'current',source:'Direct Base RPC (explorer unavailable)',openedAt:previous.openedAt||null,checkedAt:new Date().toISOString(),rows,partial:true,principalWarning:!!previous.principalWarning,verificationError:'Explorer unavailable; lifetime history may be incomplete'};
     h.metrics=yieldMetrics(position,h);return h;
    }
