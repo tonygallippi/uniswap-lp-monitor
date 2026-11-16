@@ -1,0 +1,11 @@
+{
+  "appId": "com.tonygallippi.lpwatcher",
+  "appName": "LP Watcher",
+  "webDir": "docs",
+  "server": {
+    "iosScheme": "capacitor"
+  },
+  "ios": {
+    "contentInset": "automatic"
+  }
+}
