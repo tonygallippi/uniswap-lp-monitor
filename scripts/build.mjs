@@ -1,11 +1,15 @@
 import {readFile,writeFile,mkdir,copyFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
+import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {resolve} from 'node:path';
 const root=fileURLToPath(new URL('../',import.meta.url)),dest=resolve(root,'docs');await mkdir(dest,{recursive:true});
 const [source,rpc,history]=await Promise.all(['src/app.html','src/rpc.mjs','src/history.mjs'].map(p=>readFile(resolve(root,p),'utf8')));
 const metric=history.slice(history.indexOf('export function yieldMetrics'),history.indexOf('async function explorerLogs')).replace('export function','function');
-const html=source.replace('__YIELD_METRICS__',metric),data=rpc+'\n'+history;
+const appVersion=JSON.parse(await readFile(resolve(root,'package.json'),'utf8')).version;
+let commitShort=process.env.GIT_COMMIT_SHORT||process.env.CM_COMMIT?.slice(0,7);
+if(!commitShort){try{commitShort=execFileSync('git',['rev-parse','--short=7','HEAD'],{cwd:root,encoding:'utf8'}).trim()}catch{commitShort='unknown'}}
+const html=source.replace('__YIELD_METRICS__',metric).replace('__APP_VERSION__',appVersion).replace('__COMMIT_SHORT__',commitShort),data=rpc+'\n'+history;
 await writeFile(resolve(dest,'index.html'),html);await writeFile(resolve(dest,'data.js'),data);
 for(const name of ['icon-180.png','icon-192.png','icon-512.png','lp-icon.svg'])await copyFile(resolve(root,'assets',name),resolve(dest,name));
 await writeFile(resolve(dest,'manifest.webmanifest'),JSON.stringify({id:'./',name:'LP Watcher',short_name:'LP Watcher',description:'Your Uniswap liquidity, at a glance.',start_url:'./',scope:'./',display:'standalone',background_color:'#0c1018',theme_color:'#0c1018',icons:[{src:'./icon-192.png?v=3',sizes:'192x192',type:'image/png',purpose:'any'},{src:'./icon-512.png?v=3',sizes:'512x512',type:'image/png',purpose:'any maskable'}]},null,2)+'\n');
